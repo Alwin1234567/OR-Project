@@ -1,6 +1,7 @@
 import pandas as pd
 from time import time
 from Cottage import Cottage
+import openpyxl
 
 class Planner():
     
@@ -20,7 +21,7 @@ class Planner():
         self.combinations = self.combine()
         daycount = reservations["final_day"].max() + 1
         self.cottages = dict()
-        for ID in cottages["ID"].tolist(): self.cottages[ID] = Cottage(ID, daycount)
+        for ID in cottages["ID"].tolist(): self.cottages[ID] = Cottage(ID, daycount, earliest_day)
         # self.cottages = [Cottage(ID, daycount) for ID in cottages["ID"].tolist()]
         self.print_time("finished Planner init")
     
@@ -44,7 +45,6 @@ class Planner():
     
     def assign_cottages(self):
         self.print_time("started assigning cottages")
-        not_allowed = list()
         order = self.combinations.groupby("ID_res")["index"].count().sort_values().index.tolist()
         for reservation_ID in order:
             cottages = self.combinations[self.combinations["ID_res"] == reservation_ID]
@@ -53,7 +53,6 @@ class Planner():
                 cottage = self.cottages[row["ID_cot"]]
                 if cottage.allowed_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"]):
                     cottage.add_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"])
-                    allowed = True
                     break
         self.print_time("ended assigning cottages")
 
@@ -61,3 +60,26 @@ class Planner():
         self.print_time("started displaying cottages")
         for cottage in self.cottages.values(): cottage.display_days()
         self.print_time("ended displaying cottages")
+    
+    def reservation_assignments(self):
+        assignments = dict()
+        for cottage in self.cottages.values():
+            ID = cottage.ID
+            for reservation in cottage.reservations: assignments[reservation[0]] = ID
+        return pd.Series(data = assignments).sort_index()
+    
+    def store_excel(self, filename, sheetname):
+        self.print_time("started writing in excel")
+        workbook = openpyxl.load_workbook(filename = filename)
+        worksheet = workbook[sheetname]
+        for i, cottage in enumerate(self.reservation_assignments().values.tolist(), start = 2):
+            worksheet.cell(row = i, column = 2).value = cottage
+        workbook.save(filename)
+        workbook.close()
+        self.print_time("ended writing in excel")
+    
+    @property
+    def score(self):
+        total = 0
+        for cottage in self.cottages.values(): total += cottage.score
+        return total

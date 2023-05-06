@@ -1,8 +1,9 @@
 class Cottage():
     
-    def __init__(self, ID, days):
+    def __init__(self, ID, days, startday):
         self.ID = ID
         self.days = [None] * days
+        self.startday = startday.weekday()
         
         
     def add_reservation(self, reservation, start_day, days):
@@ -27,12 +28,17 @@ class Cottage():
             if reservation[1]: score += 1
         gap = False
         gap_count = 0
-        for day in self.days:
+        fritothu = 0
+        for i, day in enumerate(self.days):
             if not gap and day == None:
+                fritothu = 0
                 gap = True
                 gap_count = 1
-                score += 1
+                score += 6
             elif gap and day == None:
+                if (i + self.startday) % 7 == 4: fritothu = 0
+                fritothu += 1
+                if fritothu == 6: score -= 3
                 gap_count += 1
                 if gap_count > 21:
                     score += 12
@@ -56,5 +62,5 @@ class Cottage():
     def reservations(self):
         items = set(self.days)
         if None in items: items.remove(None)
-        return items
+        return list(items)
         
