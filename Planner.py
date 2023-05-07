@@ -17,9 +17,16 @@ class Planner():
                        "Wi-Fi Coverage ", "Covered Terrace"]):
         self.start_time = time()
         self.print_time("starting Planner init")
+         # Add day (0 is earliest reservation day) and departure day
         earliest_day = reservations["Arrival Date"].min()
         reservations["day"] = reservations["Arrival Date"].apply(lambda x: (x-earliest_day).days)
         reservations["final_day"] = reservations["day"].add(reservations["Length of Stay"]).add(-1)
+         # Changes "# persons" for reservations to nearest higher or equal "max # pers"
+        cottage_Max_pers = cottages["Max # Pers"].unique().tolist()
+        cottage_Max_pers.append(0)
+        cottage_Max_pers.sort()
+        for i in range(len(cottage_Max_pers) - 1): reservations.loc[(cottage_Max_pers[i] < reservations["# Persons"]).multiply(reservations["# Persons"] < cottage_Max_pers[i + 1]), "# Persons"] = cottage_Max_pers[i + 1]
+        
         self.df_cottages = cottages
         self.df_reservations = reservations
         self.restrictionlist = restrictionlist
@@ -98,6 +105,16 @@ class Planner():
         """
         Function that stores the assigned cottage of a reservation in Excel.
         """
+        repeat = True
+        while repeat:
+            try: 
+                workbook = openpyxl.load_workbook(filename = filename)
+                workbook.save(filename)
+                workbook.close()
+                repeat = False
+            except:
+                answer = input("Python can't open {}.\nIf the file is opened please close it\nDo you want to try again? (y/n)".format(filename))
+                if answer != "y": return
         self.print_time("started writing in excel")
         workbook = openpyxl.load_workbook(filename = filename)
         worksheet = workbook[sheetname]
