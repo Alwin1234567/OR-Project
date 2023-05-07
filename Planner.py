@@ -1,9 +1,14 @@
+ # import modules
 import pandas as pd
 from time import time
 from Cottage import Cottage
 import openpyxl
 
+ # Planner class
 class Planner():
+    """
+    Class that stores and maintaines all info regarding reservations and cottages
+    """
     
     def __init__(self, cottages, reservations, restrictionlist = ["Class", "Face South", "Near Playground", \
                        "Close to the Centre", "Near Lake ", \
@@ -25,10 +30,20 @@ class Planner():
         # self.cottages = [Cottage(ID, daycount) for ID in cottages["ID"].tolist()]
         self.print_time("finished Planner init")
     
-    def print_time(self, msg = ""):
-        print(msg + "   --- %s seconds ---" % (time() - self.start_time))
-        
+    
+    def print_time(self, msg = ""): print(msg + "   --- %s seconds ---" % (time() - self.start_time))
+    
+    
     def combine(self):
+        """
+        Function to retrieve a dataframe with all possible reservation-cottage combos.        
+
+        Returns
+        -------
+        combined : pd.Dataframe
+            Cross product of cottages and reservations where only allowed combos are left.
+
+        """
         combined = pd.merge(self.df_reservations, self.df_cottages, how = "cross", suffixes = ("_res", "_cot"))
         combined = combined[combined["Max # Pers"] >= combined["# Persons"]]
         for restriction in self.restrictionlist:
@@ -44,6 +59,11 @@ class Planner():
         return combined
     
     def assign_cottages(self):
+        """
+        Function that assigns reservations to the cottages. There is no failsafe yes.
+        It assigns the reservation with the least possible cottages first and chooses 
+        the cottage based on whether it is considered an upgrade and the fitness score.
+        """
         self.print_time("started assigning cottages")
         order = self.combinations.groupby("ID_res")["index"].count().sort_values().index.tolist()
         for reservation_ID in order:
@@ -57,11 +77,17 @@ class Planner():
         self.print_time("ended assigning cottages")
 
     def display_cottages(self):
+        """
+        Function that prints all cottage planning.
+        """
         self.print_time("started displaying cottages")
         for cottage in self.cottages.values(): cottage.display_days()
         self.print_time("ended displaying cottages")
     
     def reservation_assignments(self):
+        """
+        Function that returns a dataframe with the reservations as index and the cottage number they are assigned to.
+        """
         assignments = dict()
         for cottage in self.cottages.values():
             ID = cottage.ID
@@ -69,6 +95,9 @@ class Planner():
         return pd.Series(data = assignments).sort_index()
     
     def store_excel(self, filename, sheetname):
+        """
+        Function that stores the assigned cottage of a reservation in Excel.
+        """
         self.print_time("started writing in excel")
         workbook = openpyxl.load_workbook(filename = filename)
         worksheet = workbook[sheetname]
