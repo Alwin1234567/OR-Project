@@ -82,7 +82,7 @@ class Cottage():
             elif gap and day == None:
                 if (i + self.startday) % 7 == 4: fritothu = 0
                 fritothu += 1
-                if fritothu == 6: score += self.scores["GapFriToThu"]
+                if fritothu == 7: score += self.scores["GapFriToThu"]
                 gap_count += 1
                 if gap_count > 21:
                     score += self.scores["GapLegionella"]

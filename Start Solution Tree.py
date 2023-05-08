@@ -22,3 +22,5 @@ planner = Planner(cottages, reservations)
 planner.assign_cottages()
 planner.store_excel(database, validator_sheet)
 print(planner.score)
+
+combinations = planner.combinations

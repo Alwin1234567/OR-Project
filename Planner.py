@@ -34,7 +34,6 @@ class Planner():
         daycount = reservations["final_day"].max() + 1
         self.cottages = dict()
         for ID in cottages["ID"].tolist(): self.cottages[ID] = Cottage(ID, daycount, earliest_day)
-        # self.cottages = [Cottage(ID, daycount) for ID in cottages["ID"].tolist()]
         self.print_time("finished Planner init")
     
     
@@ -76,11 +75,14 @@ class Planner():
         for reservation_ID in order:
             cottages = self.combinations[self.combinations["ID_res"] == reservation_ID]
             cottages = cottages.sort_values(by = ["upgrade", "fitness"])[["ID_cot", "ID_res", "day", "Length of Stay", "upgrade"]]
+            assigned = False
             for index, row in cottages.iterrows():
                 cottage = self.cottages[row["ID_cot"]]
                 if cottage.allowed_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"]):
                     cottage.add_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"])
+                    assigned = True
                     break
+            if not assigned: print("couldn't assign reservation {}".format(reservation_ID))
         self.print_time("ended assigning cottages")
 
     def display_cottages(self):
