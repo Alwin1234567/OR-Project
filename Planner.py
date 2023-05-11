@@ -126,6 +126,102 @@ class Planner():
         workbook.close()
         self.print_time("ended writing in excel")
     
+    def assign_improvements_best(self):
+        self.print_time("started improving assignments")
+        count = 0
+        improved = True
+        while improved:
+            improved = False
+            assignments = self.reservation_assignments()
+            cottageIDs = list()
+            cottagescores = list()
+            for cottage in self.cottages.values():
+                cottageIDs.append(cottage.ID)
+                cottagescores.append(cottage.score)
+            order = pd.Series(cottagescores, index = cottageIDs).sort_values(ascending = False).index.tolist()
+            best = (0, 0)
+            for cottage_ID in order:
+                reservations = self.combinations[self.combinations["ID_cot"] == cottage_ID]
+                for index, row in reservations.iterrows():
+                    skip = False
+                    for reservation in self.cottages[cottage_ID].reservations: 
+                        if row["ID_res"] == reservation[0]: 
+                            skip = True
+                            break
+                    if skip: continue
+                    startscore = self.cottages[assignments.loc[row["ID_res"]]].score + \
+                                 self.cottages[cottage_ID].score
+                    if self.cottages[cottage_ID].allowed_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"]):
+                        old_cottage_ID = assignments.loc[row["ID_res"]]
+                        if not self.switch_cottage(row["ID_res"], cottage_ID): print("error while switching cottages")
+                        endscore = self.cottages[old_cottage_ID].score + self.cottages[cottage_ID].score
+                        if not self.switch_cottage(row["ID_res"], old_cottage_ID): print("error while switching back cottages")
+                        score = startscore - endscore
+                        if score > best[1]:
+                            best = (row["ID_res"], score)
+                            improved = True
+                if improved:
+                    if not self.switch_cottage(best[0], cottage_ID): print("error while switching cottages")
+                    break
+            count += 1
+            if count % 1 == 0: self.print_time("iteratie {} with score {}".format(count, self.score))
+        self.print_time("ended improving assignments") 
+    
+    def assign_improvements_any(self, max_time = 300):
+        self.print_time("started improving assignments")
+        count = 0
+        improved = True
+        runtime = time()
+        repeat_after = 5
+        while time() - runtime < max_time:
+            improved = False
+            assignments = self.reservation_assignments()
+            cottageIDs = list()
+            cottagescores = list()
+            for cottage in self.cottages.values():
+                cottageIDs.append(cottage.ID)
+                cottagescores.append(cottage.score)
+            order = pd.Series(cottagescores, index = cottageIDs).sort_values(ascending = False).index.tolist()
+            for i, cottage_ID in enumerate(order):
+                reservations = self.combinations[self.combinations["ID_cot"] == cottage_ID]
+                for index, row in reservations.iterrows():
+                    skip = False
+                    for reservation in self.cottages[cottage_ID].reservations: 
+                        if row["ID_res"] == reservation[0]: 
+                            skip = True
+                            break
+                    if skip: continue
+                    startscore = self.cottages[assignments.loc[row["ID_res"]]].score + \
+                                 self.cottages[cottage_ID].score
+                    if self.cottages[cottage_ID].allowed_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"]):
+                        old_cottage_ID = assignments.loc[row["ID_res"]]
+                        if not self.switch_cottage(row["ID_res"], cottage_ID): print("error while switching cottages")
+                        endscore = self.cottages[old_cottage_ID].score + self.cottages[cottage_ID].score
+                        score = startscore - endscore
+                        if score <= 0:
+                            if not self.switch_cottage(row["ID_res"], old_cottage_ID): print("error while switching back cottages")
+                        else:
+                            improved = True
+                            count += 1
+                            assignments.loc[row["ID_res"]] = cottage_ID
+                            if count % 10 == 0: self.print_time("iteratie {} with score {}".format(count, self.score))
+                if i >= repeat_after:
+                    if not improved: repeat_after += 1
+                    else: break
+        self.print_time("ended improving assignments") 
+
+    
+    def switch_cottage(self, ID_res, new_cottage_ID):
+        assignments = self.reservation_assignments()
+        reservation_old = self.cottages[assignments.loc[ID_res]].find_reservation(ID_res)
+        reservation_new = self.combinations.loc[(self.combinations["ID_res"] == ID_res).multiply(self.combinations["ID_cot"] == new_cottage_ID)].squeeze()
+        if self.cottages[new_cottage_ID].allowed_reservation((reservation_new["ID_res"], reservation_new["upgrade"]), reservation_new["day"], reservation_new["Length of Stay"]):
+            self.cottages[assignments.loc[ID_res]].remove_reservation(reservation_old)
+            self.cottages[new_cottage_ID].add_reservation((reservation_new["ID_res"], reservation_new["upgrade"]), reservation_new["day"], reservation_new["Length of Stay"])
+            return True
+        return False
+
+
     @property
     def score(self):
         total = 0

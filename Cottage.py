@@ -43,7 +43,9 @@ class Cottage():
         if reservation not in self.days: 
             print("!!! reservation not in cottage")
             return
-        self.days = list(map(lambda day: day.replace(reservation, None), self.days))
+        for i, day in enumerate(self.days):
+            if day == reservation: self.days[i] = None
+        # self.days = list(map(lambda day: day.replace(reservation, None), self.days))
     
     def allowed_reservation(self, reservation, start_day, days):
         """
@@ -100,6 +102,12 @@ class Cottage():
             else: days.append(day[0])
         msg = str(days) + str(self.score)
         print(msg)
+    
+    def find_reservation(self, reservation_ID):
+        for day in self.days:
+            if day != None:
+                if day[0] == reservation_ID: return day
+        
                 
     
     @property

@@ -20,6 +20,7 @@ reservations = pd.read_excel(database, sheet_name = reservations_sheet)
  # code to run planner
 planner = Planner(cottages, reservations)
 planner.assign_cottages()
+planner.assign_improvements_any(1200)
 planner.store_excel(database, validator_sheet)
 print(planner.score)
 
