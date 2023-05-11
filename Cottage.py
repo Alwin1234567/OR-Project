@@ -118,4 +118,11 @@ class Cottage():
         items = set(self.days)
         if None in items: items.remove(None)
         return list(items)
+    
+    @property
+    def upgrade_count(self):
+        total = 0
+        for reservation in self.reservations:
+            if reservation[1]: total += self.scores["Upgrade"]
+        return total
         

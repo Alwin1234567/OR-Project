@@ -93,6 +93,27 @@ class Planner():
         for cottage in self.cottages.values(): cottage.display_days()
         self.print_time("ended displaying cottages")
     
+    def read_assignements(self, assignments, remove = False):
+        """
+        Function that takes a series with the reservations assigned to a cottage and imports this into the class.
+
+        Parameters
+        ----------
+        assignments : pd.Series
+            Series with reservation_ID as index and cottage number as value.
+        remove : bool, optional
+            boolean that describes if the cottages should be emptied first. The default is False.
+        """
+        self.print_time("started reading assignments")
+        if remove:
+            for cottage in self.cottages.values():
+                for reservation in cottage.reservations:
+                    cottage.remove_reservation(reservation)
+        for reservation, cottage in assignments.items():
+            combination = self.combinations.loc[(self.combinations["ID_res"] == reservation).multiply(self.combinations["ID_cot"] == cottage)].squeeze()
+            self.cottages[cottage].add_reservation((combination["ID_res"], combination["upgrade"]), combination["day"], combination["Length of Stay"])
+        self.print_time("ended reading assignments")
+    
     def reservation_assignments(self):
         """
         Function that returns a dataframe with the reservations as index and the cottage number they are assigned to.
@@ -204,7 +225,50 @@ class Planner():
                             improved = True
                             count += 1
                             assignments.loc[row["ID_res"]] = cottage_ID
-                            if count % 10 == 0: self.print_time("iteratie {} with score {}".format(count, self.score))
+                            if count % 10 == 0: self.print_time("iteratiion {} with score {}".format(count, self.score))
+                if i >= repeat_after:
+                    if not improved: repeat_after += 1
+                    else: break
+        self.print_time("ended improving assignments") 
+    
+    def assign_improvements_simulated(self, max_time = 300):
+        self.print_time("started improving assignments")
+        count = 0
+        improved = True
+        runtime = time()
+        repeat_after = 5
+        while time() - runtime < max_time:
+            improved = False
+            assignments = self.reservation_assignments()
+            cottageIDs = list()
+            cottagescores = list()
+            for cottage in self.cottages.values():
+                cottageIDs.append(cottage.ID)
+                cottagescores.append(cottage.score)
+            order = pd.Series(cottagescores, index = cottageIDs).sort_values(ascending = False).index.tolist()
+            for i, cottage_ID in enumerate(order):
+                reservations = self.combinations[self.combinations["ID_cot"] == cottage_ID]
+                for index, row in reservations.iterrows():
+                    skip = False
+                    for reservation in self.cottages[cottage_ID].reservations: 
+                        if row["ID_res"] == reservation[0]: 
+                            skip = True
+                            break
+                    if skip: continue
+                    startscore = self.cottages[assignments.loc[row["ID_res"]]].score + \
+                                 self.cottages[cottage_ID].score
+                    if self.cottages[cottage_ID].allowed_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"]):
+                        old_cottage_ID = assignments.loc[row["ID_res"]]
+                        if not self.switch_cottage(row["ID_res"], cottage_ID): print("error while switching cottages")
+                        endscore = self.cottages[old_cottage_ID].score + self.cottages[cottage_ID].score
+                        score = startscore - endscore
+                        if score <= 0:
+                            if not self.switch_cottage(row["ID_res"], old_cottage_ID): print("error while switching back cottages")
+                        else:
+                            improved = True
+                            count += 1
+                            assignments.loc[row["ID_res"]] = cottage_ID
+                            if count % 10 == 0: self.print_time("iteration {} with score {}".format(count, self.score))
                 if i >= repeat_after:
                     if not improved: repeat_after += 1
                     else: break
@@ -226,4 +290,10 @@ class Planner():
     def score(self):
         total = 0
         for cottage in self.cottages.values(): total += cottage.score
+        return total
+    
+    @property
+    def upgrade_count(self):
+        total = 0
+        for cottage in self.cottages.values(): total += cottage.upgrade_count
         return total
