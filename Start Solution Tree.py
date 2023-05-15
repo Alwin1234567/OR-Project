@@ -23,10 +23,11 @@ assignments = pd.read_excel(database, sheet_name = read_sheet, index_col = 0, us
 
  # code to run planner
 planner = Planner(cottages, reservations)
-# planner.assign_cottages()
-# planner.assign_improvements_any(360)
+planner.assign_cottages()
+# planner.assign_improvements_any(300)
+# planner.assign_improvements_simulated(300)
 # planner.store_excel(database, validator_sheet)
 # planner.read_assignements(assignments)
 print(planner.score, planner.upgrade_count)
 
-# combinations = planner.combinations
+combinations = planner.combinations

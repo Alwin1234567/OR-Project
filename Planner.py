@@ -3,6 +3,8 @@ import pandas as pd
 from time import time
 from Cottage import Cottage
 import openpyxl
+from math import exp
+from random import random
 
  # Planner class
 class Planner():
@@ -48,7 +50,6 @@ class Planner():
         -------
         combined : pd.Dataframe
             Cross product of cottages and reservations where only allowed combos are left.
-
         """
         combined = pd.merge(self.df_reservations, self.df_cottages, how = "cross", suffixes = ("_res", "_cot"))
         combined = combined[combined["Max # Pers"] >= combined["# Persons"]]
@@ -231,48 +232,41 @@ class Planner():
                     else: break
         self.print_time("ended improving assignments") 
     
-    def assign_improvements_simulated(self, max_time = 300):
+    
+    def assign_improvements_simulated(self, max_time = 300, temperature_init_mul = 0.0001, temperature_mul = 0.5, temperature_repeat = 10):
         self.print_time("started improving assignments")
-        count = 0
-        improved = True
+        temperature = self.score * temperature_init_mul
         runtime = time()
-        repeat_after = 5
+        assignments = [self.reservation_assignments(), self.score]
+        best_assignment = (assignments[0].copy, self.score)
+        combinations = self.combinations[self.combinations["Cottage (Fixed)"] == 0]
+        itteration = 0
         while time() - runtime < max_time:
-            improved = False
-            assignments = self.reservation_assignments()
-            cottageIDs = list()
-            cottagescores = list()
-            for cottage in self.cottages.values():
-                cottageIDs.append(cottage.ID)
-                cottagescores.append(cottage.score)
-            order = pd.Series(cottagescores, index = cottageIDs).sort_values(ascending = False).index.tolist()
-            for i, cottage_ID in enumerate(order):
-                reservations = self.combinations[self.combinations["ID_cot"] == cottage_ID]
-                for index, row in reservations.iterrows():
-                    skip = False
-                    for reservation in self.cottages[cottage_ID].reservations: 
-                        if row["ID_res"] == reservation[0]: 
-                            skip = True
-                            break
-                    if skip: continue
-                    startscore = self.cottages[assignments.loc[row["ID_res"]]].score + \
-                                 self.cottages[cottage_ID].score
-                    if self.cottages[cottage_ID].allowed_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"]):
-                        old_cottage_ID = assignments.loc[row["ID_res"]]
-                        if not self.switch_cottage(row["ID_res"], cottage_ID): print("error while switching cottages")
-                        endscore = self.cottages[old_cottage_ID].score + self.cottages[cottage_ID].score
-                        score = startscore - endscore
-                        if score <= 0:
-                            if not self.switch_cottage(row["ID_res"], old_cottage_ID): print("error while switching back cottages")
-                        else:
-                            improved = True
-                            count += 1
-                            assignments.loc[row["ID_res"]] = cottage_ID
-                            if count % 10 == 0: self.print_time("iteration {} with score {}".format(count, self.score))
-                if i >= repeat_after:
-                    if not improved: repeat_after += 1
-                    else: break
-        self.print_time("ended improving assignments") 
+            success = False
+            row = combinations.sample(replace = False).squeeze()
+            if assignments[0].loc[row["ID_res"]] == row["ID_cot"] or \
+                not self.cottages[row["ID_cot"]].allowed_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"]): pass
+            else:
+                old_cottage_ID = assignments[0].loc[row["ID_res"]]
+                startscore = self.cottages[assignments[0].loc[row["ID_res"]]].score + \
+                             self.cottages[row["ID_cot"]].score
+                if not self.switch_cottage(row["ID_res"], row["ID_cot"]): print("error while switching cottages")
+                endscore = self.cottages[old_cottage_ID].score + self.cottages[row["ID_cot"]].score
+                score = startscore - endscore
+                if score < 0:
+                    success = random() < exp(score / temperature)
+                else: success = True
+                if success:
+                    assignments[0].loc[row["ID_res"]] = row["ID_cot"]
+                    assignments[1] += score
+                    if assignments[1] > best_assignment[1]: best_assignment = (assignments[0].copy(), self.score)
+                    itteration += 1
+                    if itteration % 10 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
+                    if itteration % temperature_repeat == 0: temperature *= temperature_mul
+                else:
+                    if not self.switch_cottage(row["ID_res"], old_cottage_ID): print("error while switching back cottages")
+        self.print_time("ended improving assignments")
+        self.read_assignements(best_assignment[0], remove = True)
 
     
     def switch_cottage(self, ID_res, new_cottage_ID):
