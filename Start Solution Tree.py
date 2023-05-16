@@ -4,6 +4,7 @@ from Planner import Planner
 
  # setting variables
 database = "Dataset 11.xlsx"
+# database = "groep 10.xlsx"
 cottage_sheet = "Cottages"
 reservations_sheet = "Reservations"
 validator_sheet = "Validator"
@@ -24,10 +25,12 @@ assignments = pd.read_excel(database, sheet_name = read_sheet, index_col = 0, us
  # code to run planner
 planner = Planner(cottages, reservations)
 planner.assign_cottages()
+print(planner.score)
+planner.gaps_optimiser(max_time = 120)
 # planner.assign_improvements_any(300)
 # planner.assign_improvements_simulated(300)
 # planner.store_excel(database, validator_sheet)
 # planner.read_assignements(assignments)
-print(planner.score, planner.upgrade_count)
+print(planner.score)
 
 combinations = planner.combinations
