@@ -153,7 +153,7 @@ class Planner():
         self.print_time("ended writing in excel")
     
     def assign_improvements_best(self):
-        self.print_time("started improving assignments")
+        self.print_time("started improving assignments with a score of {}".format(self.score))
         count = 0
         improved = True
         while improved:
@@ -191,10 +191,10 @@ class Planner():
                     break
             count += 1
             if count % 1 == 0: self.print_time("iteratie {} with score {}".format(count, self.score))
-        self.print_time("ended improving assignments") 
+        self.print_time("ended improving assignments with a score of {}".format(self.score)) 
     
     def assign_improvements_any(self, max_time = 300):
-        self.print_time("started improving assignments")
+        self.print_time("started improving assignments with a score of {}".format(self.score))
         count = 0
         improved = True
         runtime = time()
@@ -234,11 +234,11 @@ class Planner():
                 if i >= repeat_after:
                     if not improved: repeat_after += 1
                     else: break
-        self.print_time("ended improving assignments") 
+        self.print_time("ended improving assignments with a score of {}".format(self.score)) 
     
     
     def assign_improvements_simulated(self, max_time = 300, temperature_init_mul = 0.0001, temperature_mul = 0.5, temperature_repeat = 10):
-        self.print_time("started improving assignments")
+        self.print_time("started improving assignments with a score of {}".format(self.score))
         temperature = self.score * temperature_init_mul
         runtime = time()
         assignments = [self.reservation_assignments(), self.score]
@@ -269,12 +269,12 @@ class Planner():
                     if itteration % temperature_repeat == 0: temperature *= temperature_mul
                 else:
                     if not self.switch_cottage(row["ID_res"], old_cottage_ID): print("error while switching back cottages")
-        self.print_time("ended improving assignments")
+        self.print_time("ended improving assignments with a score of {}".format(self.score))
         self.read_assignements(best_assignment[0], remove = True)
 
     
     def gaps_optimiser(self, max_time = 300):
-        self.print_time("started improving gaps")
+        self.print_time("started improving gaps with a score of {}".format(self.score))
         itteration = 0
         runtime = time()
         improved = True
@@ -297,16 +297,16 @@ class Planner():
                         if self.find_gap_improvement_456(cottage_ID, gap_start, i - 1):
                             improved = True
                             itteration += 1
-                            if itteration % 100 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
+                            if itteration % 20 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
                         # elif front_reservation != (0, None):
                         #     if self.find_gap_improvement_1(cottage_ID, gap_start, i - 1, front_reservation):
                         #         itteration += 1
-                        #         if itteration % 100 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
+                        #         if itteration % 20 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
                         gap_start = None
                 if time() - runtime > max_time:
-                    self.print_time("ended improving gaps")
+                    self.print_time("ended improving gaps with a score of {}".format(self.score))
                     return
-        self.print_time("ended improving gaps")
+        self.print_time("ended improving gaps with a score of {}".format(self.score))
                     
     def find_gap_improvement_1(self, cottage_ID, gap_start, gap_end, front_reservation):
         combinations = self.combinations
