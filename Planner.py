@@ -271,11 +271,26 @@ class Planner():
                     if not self.switch_cottage(row["ID_res"], old_cottage_ID): print("error while switching back cottages")
         self.print_time("ended improving assignments with a score of {}".format(self.score))
         self.read_assignements(best_assignment[0], remove = True)
-
+    
+    
+    def gaps_legionella_optimiser_repeat(self, max_time = 600):
+        self.print_time("started repeating gaps and legionella with a score of {}".format(self.score))
+        runtime = time()
+        while True:
+            improved = self.gaps_optimiser(max_time = max_time + runtime - time())
+            improved += self.legionella_optimiser(max_time = max_time + runtime - time())
+            if not improved:
+                self.print_time("ended repeating gaps and legionella with a score of {}".format(self.score))
+                return
+            if time() - runtime > max_time:
+                self.print_time("ended repeating gaps and legionella with a score of {}".format(self.score))
+                return
+    
     
     def gaps_optimiser(self, max_time = 300):
         self.print_time("started improving gaps with a score of {}".format(self.score))
         itteration = 0
+        has_improved = False
         runtime = time()
         improved = True
         while improved: # verschil tussen 1 run en meerdere is minimaal
@@ -296,18 +311,90 @@ class Planner():
                     if gap_start != None and day != None:
                         if self.find_gap_improvement_456(cottage_ID, gap_start, i - 1):
                             improved = True
+                            has_improved = True
                             itteration += 1
                             if itteration % 20 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
-                        # elif front_reservation != (0, None):
-                        #     if self.find_gap_improvement_1(cottage_ID, gap_start, i - 1, front_reservation):
-                        #         itteration += 1
-                        #         if itteration % 20 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
+                        elif front_reservation != (0, None):
+                            if self.find_gap_improvement_1(cottage_ID, gap_start, i - 1, front_reservation):
+                                improved = True
+                                has_improved = True
+                                itteration += 1
+                                if itteration % 20 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
                         gap_start = None
                 if time() - runtime > max_time:
                     self.print_time("ended improving gaps with a score of {}".format(self.score))
-                    return
+                    return has_improved
         self.print_time("ended improving gaps with a score of {}".format(self.score))
-                    
+        return has_improved
+        
+    def legionella_optimiser(self, max_time = 300):
+        self.print_time("started improving legionella with a score of {}".format(self.score))
+        runtime = time()
+        has_improved = False
+        itteration = 0
+        if self.legionellas == 0:
+            self.print_time("ended improving legionella with a score of {}".format(self.score))
+            return has_improved
+        while True:
+            assignments = self.reservation_assignments()
+            options = self.combinations
+            options["edges"] = self.combinations["ID_cot"].map(lambda row: self.cottages[row].legionella_edges)
+            options = options[options["edges"].map(lambda row: row[0]) > 0]
+            options["begin_edge"] = options["edges"].map(lambda row: row[1])
+            options["end_edge"] = options["edges"].map(lambda row: row[2])
+            options = options.drop(columns = ["edges"])
+            options = options[(options["day"] < options["begin_edge"] + 22).multiply(options["day"] >= options["begin_edge"]).multiply(options["final_day"] > options["end_edge"] - 22).multiply(options["final_day"] <= options["end_edge"])]
+            
+            options = self.get_empty(options, options["day"] - 1, options["final_day"] + 1)
+            if options.empty: 
+                self.print_time("ended improving legionella with a score of {}".format(self.score))
+                return has_improved
+            options = options[options["ID_res"].map(lambda ID: self.cottages[assignments[ID]].remove_no_legionella(ID))]
+            if options.empty: 
+                self.print_time("ended improving legionella with a score of {}".format(self.score))
+                return has_improved
+            options = options.drop_duplicates('ID_res', keep = 'first')
+            options = options.drop_duplicates('ID_cot', keep = 'first')
+            for index, row in options.iterrows():
+                if not self.switch_cottage(row["ID_res"], row["ID_cot"]): print("error while switching cottages")
+                itteration += 1
+                has_improved = True
+                if itteration % 10 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
+            if time() - runtime > max_time:
+                self.print_time("ended improving legionella with a score of {}".format(self.score))
+                return has_improved
+    
+    
+    def upgrade_optimiser(self, max_time = 300):
+        self.print_time("started improving upgrades with a score of {}".format(self.score))
+        runtime = time()
+        itteration = 0
+        while True:
+            assignments = self.reservation_assignments()
+            assignments_merged = pd.Series(assignments.reset_index().values.tolist())
+            assignments = assignments[assignments_merged.map(lambda row: self.cottages[row[1]].is_upgrade(row[0])).values]
+            options = self.df_reservations
+            options = options[options["ID"].isin(assignments.index)]
+            options = pd.merge(options, options, how = "cross", suffixes = ("_1", "_2"))
+            options = options[(options["day_1"] == options["day_2"]).multiply(options["final_day_1"] == options["final_day_2"]).multiply(options["ID_1"] != options["ID_2"])]
+            options["improvement"] = options[["ID_1", "ID_2"]].values.tolist()
+            options["improvement"] = options["improvement"].map(sorted)
+            options = options.drop_duplicates('improvement', keep = 'first')
+            options = options[options["improvement"].map(lambda reservation_ids: self.possible_upgrade(reservation_ids[0], reservation_ids[1], assignments))]
+            if options.empty:
+                self.print_time("ended improving upgrades with a score of {}".format(self.score))
+                return
+            while not options.empty:
+                reservations = options.iloc[0]
+                if not self.swap_cottages(reservations["ID_1"], reservations["ID_2"]): print("error while swapping cottages")
+                options = options[(options["ID_1"] != reservations["ID_1"]).multiply(options["ID_1"] != reservations["ID_2"]).multiply(options["ID_2"] != reservations["ID_1"]).multiply(options["ID_2"] != reservations["ID_2"])]
+                itteration += 1
+                if itteration % 10 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
+            if time() - runtime > max_time:
+                self.print_time("ended improving upgrades with a score of {}".format(self.score))
+                return
+
+
     def find_gap_improvement_1(self, cottage_ID, gap_start, gap_end, front_reservation):
         combinations = self.combinations
         assignments = self.reservation_assignments()
@@ -355,6 +442,17 @@ class Planner():
             options = options.sort_values(by = ["left_empty", "right_empty"], ascending = False)
             return options
 
+
+    def possible_upgrade(self, ID_res1, ID_res2, assignments):
+        combinations = self.combinations
+        cottage1 = assignments.loc[ID_res1]
+        cottage2 = assignments.loc[ID_res2]
+        combi1 = combinations.loc[(combinations["ID_res"] == ID_res1).multiply(combinations["ID_cot"] == cottage2)]
+        combi2 = combinations.loc[(combinations["ID_res"] == ID_res2).multiply(combinations["ID_cot"] == cottage1)]
+        if combi1.empty or combi2.empty: return False
+        return not bool(combi1.squeeze()["upgrade"] * combi2.squeeze()["upgrade"])
+
+
     def switch_cottage(self, ID_res, new_cottage_ID):
         combinations = self.combinations
         assignments = self.reservation_assignments()
@@ -386,7 +484,14 @@ class Planner():
         self.cottages[cottage2].add_reservation((reservation_new2["ID_res"], reservation_new2["upgrade"]), reservation_new2["day"], reservation_new2["Length of Stay"])
         return False
         
-            
+    def results(self):
+        msg = "The current assignments have a score of {}\n".format(self.score)
+        msg += "The scores are as follows:\n"
+        msg += "{} gaps for a score of {}\n".format(self.gaps, self.gaps * 6)
+        msg += "{} legionella gaps for a score of {}\n".format(self.legionellas, self.legionellas * 12)
+        msg += "{} fri to thu gaps for a score of {}\n".format(self.fritothus, self.fritothus * -3)
+        msg += "{} upgardes for a score of {}".format(self.upgrades, self.upgrades * 1)
+        print(msg)
         
         
 
@@ -398,9 +503,9 @@ class Planner():
         return total
     
     @property
-    def upgrade_count(self):
+    def upgrades(self):
         total = 0
-        for cottage in self.cottages.values(): total += cottage.upgrade_count
+        for cottage in self.cottages.values(): total += cottage.upgrades
         return total
     
     @property

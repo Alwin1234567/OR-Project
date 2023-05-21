@@ -77,6 +77,10 @@ class Cottage():
         fritothu = 0
         legionella_count = 0
         fritothu_gap = 0
+        gap_start = 0
+        legionella_gap = False
+        legionella_start = 0
+        legionella_end = 0
         for i, day in enumerate(self.days):
             if not gap and day == None:
                 fritothu = -100
@@ -86,6 +90,7 @@ class Cottage():
                 gap_count = 1
                 score += self.scores["Gap"]
                 gaps_count += 1
+                gap_start = i
             elif gap and day == None:
                 if (i + self.startday) % 7 == 4: fritothu = 0
                 fritothu += 1
@@ -94,11 +99,18 @@ class Cottage():
                     fritothu_gap += 1
                 gap_count += 1
                 if gap_count == 22:
+                    legionella_gap = True
+                    legionella_start = gap_start
                     score += self.scores["GapLegionella"]
                     legionella_count += 1
-            elif gap and day != None: gap = False
+            elif gap and day != None:
+                gap = False
+                if legionella_gap:
+                    legionella_end = i - 1
+                    legionella_gap = False
+        if legionella_gap: legionella_end = i
         if return_sort == "gap": return gaps_count
-        if return_sort == "legionella": return legionella_count
+        if return_sort == "legionella": return (legionella_count, legionella_start, legionella_end)
         if return_sort == "fritothu": return fritothu_gap
         return score
     
@@ -124,6 +136,19 @@ class Cottage():
         return False
                 
     
+    def remove_no_legionella(self, reservation_ID):
+        reservation = self.find_reservation(reservation_ID)
+        count = 0
+        for day in self.days:
+            if day == None or day == reservation:
+                count += 1
+                if count == 22: return False
+            else: count = 0
+        return True
+    
+    def is_upgrade(self, reservation_ID): return self.find_reservation(reservation_ID)[1]
+        
+    
     @property
     def score(self): return self.calculate_score()
     
@@ -134,7 +159,7 @@ class Cottage():
         return list(items)
     
     @property
-    def upgrade_count(self):
+    def upgrades(self):
         total = 0
         for reservation in self.reservations:
             if reservation[1]: total += self.scores["Upgrade"]
@@ -144,7 +169,10 @@ class Cottage():
     def gaps(self): return self.calculate_score(return_sort = "gap")
     
     @property
-    def legionellas(self): return self.calculate_score(return_sort = "legionella")
+    def legionellas(self): return self.calculate_score(return_sort = "legionella")[0]
+    
+    @property
+    def legionella_edges(self): return self.calculate_score(return_sort = "legionella")
     
     @property
     def fritothus(self): return self.calculate_score(return_sort = "fritothu")
