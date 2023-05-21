@@ -153,6 +153,9 @@ class Planner():
         self.print_time("ended writing in excel")
     
     def assign_improvements_best(self):
+        """
+        Function that tries to find the best switch for each cottage and applies them. (Very slow)
+        """
         self.print_time("started improving assignments with a score of {}".format(self.score))
         count = 0
         improved = True
@@ -194,6 +197,14 @@ class Planner():
         self.print_time("ended improving assignments with a score of {}".format(self.score)) 
     
     def assign_improvements_any(self, max_time = 300):
+        """
+        Function that tries to find a better score and applies them (slow).
+
+        Parameters
+        ----------
+        max_time : INT, optional
+            Sets the maximum amount of seconds the function is allowed to run.. The default is 300.
+        """
         self.print_time("started improving assignments with a score of {}".format(self.score))
         count = 0
         improved = True
@@ -238,6 +249,20 @@ class Planner():
     
     
     def assign_improvements_simulated(self, max_time = 300, temperature_init_mul = 0.0001, temperature_mul = 0.5, temperature_repeat = 10):
+        """
+        Function that uses simulated annealing to try and find a better score (slow).
+
+        Parameters
+        ----------
+        max_time : INT, optional
+            Sets the maximum amount of seconds the function is allowed to run. The default is 300.
+        temperature_init_mul : FLOAT, optional
+            multiplier of the first score to create initial temperature. The default is 0.0001.
+        temperature_mul : FLOAT, optional
+            multiplier of the temperature after each repeat. The default is 0.5.
+        temperature_repeat : INT, optional
+            amount of itterations before the temperature is reduced. The default is 10.
+        """
         self.print_time("started improving assignments with a score of {}".format(self.score))
         temperature = self.score * temperature_init_mul
         runtime = time()
@@ -274,6 +299,14 @@ class Planner():
     
     
     def gaps_legionella_optimiser_repeat(self, max_time = 600):
+        """
+        Function that alternates gaps and legionella improvements until time runs out or no more improvements are found.
+
+        Parameters
+        ----------
+        max_time : INT, optional
+            Sets the maximum amount of seconds the function is allowed to run. The default is 600.
+        """
         self.print_time("started repeating gaps and legionella with a score of {}".format(self.score))
         runtime = time()
         while True:
@@ -288,6 +321,20 @@ class Planner():
     
     
     def gaps_optimiser(self, max_time = 300):
+        """
+        Function that goes over the gaps in cottages and tries to find a suitable reservation to fill the gap without creating new gaps.
+
+        Parameters
+        ----------
+        max_time : INT, optional
+            Sets the maximum amount of seconds the function is allowed to run. The default is 600.. The default is 300.
+
+        Returns
+        -------
+        has_improved : BOOL
+            variable that tracks if any imprvements have been made.
+
+        """
         self.print_time("started improving gaps with a score of {}".format(self.score))
         itteration = 0
         has_improved = False
@@ -328,6 +375,20 @@ class Planner():
         return has_improved
         
     def legionella_optimiser(self, max_time = 300):
+        """
+        Function that finds cottages with legionella and tries to find reservations to remove legionella without creating new gaps.
+
+        Parameters
+        ----------
+        max_time : INT, optional
+            Sets the maximum amount of seconds the function is allowed to run. The default is 600.. The default is 300.
+
+        Returns
+        -------
+        has_improved : BOOL
+            variable that tracks if any imprvements have been made..
+
+        """
         self.print_time("started improving legionella with a score of {}".format(self.score))
         runtime = time()
         has_improved = False
@@ -366,6 +427,14 @@ class Planner():
     
     
     def upgrade_optimiser(self, max_time = 300):
+        """
+        Function that finds duos of reservations that both have an upgrade. Then switches them if that reduces the amount of upgrades.
+
+        Parameters
+        ----------
+        max_time : INT, optional
+            Sets the maximum amount of seconds the function is allowed to run. The default is 600.. The default is 300.. The default is 300.
+        """
         self.print_time("started improving upgrades with a score of {}".format(self.score))
         runtime = time()
         itteration = 0
@@ -396,6 +465,26 @@ class Planner():
 
 
     def find_gap_improvement_1(self, cottage_ID, gap_start, gap_end, front_reservation):
+        """
+        Function that tries to find a suitable reservation to swap the reservation with and also fill the gap without creating a new gap.
+
+        Parameters
+        ----------
+        cottage_ID : INT
+            ID of cottage with gap.
+        gap_start : TYPE
+            first day of the gap.
+        gap_end : INT
+            last day of gap.
+        front_reservation : INT
+            ID and day of reservation in front of gap.
+
+        Returns
+        -------
+        BOOL
+            variable that indicates if an inporvement has been made.
+
+        """
         combinations = self.combinations
         assignments = self.reservation_assignments()
         allowed_reservations = assignments[assignments.isin(combinations[combinations["ID_res"] == front_reservation[1][0]]["ID_cot"])].index
@@ -407,6 +496,24 @@ class Planner():
         return True
 
     def find_gap_improvement_456(self, cottage_ID, gap_start, gap_end):
+        """
+        Function that tries to find a reservation to fill the gap in the cottage without creating a new gap.
+
+        Parameters
+        ----------
+        cottage_ID : INT
+            ID of cottage with gap.
+        gap_start : TYPE
+            first day of the gap.
+        gap_end : INT
+            last day of gap.
+
+        Returns
+        -------
+        BOOL
+            variable that indicates if an inporvement has been made..
+
+        """
         combinations = self.combinations
         options = combinations[(combinations["ID_cot"] == cottage_ID).multiply(combinations["day"] == gap_start).multiply(combinations["final_day"] == gap_end)]
         if options.empty: return False
@@ -417,6 +524,26 @@ class Planner():
         
 
     def get_empty(self, options, start, end, side = "both"):
+        """
+        Function that filters for reservations with gaps next to them.
+
+        Parameters
+        ----------
+        options : pd.DataFrame
+            DataFrame with reservations.
+        start : INT or pd.Series
+            Value that indicates the day on which it needs to check for a gap. Usually on the left side of a reservation.
+        end : INT or pd.Series
+            Value that indicates the day on which it needs to check for a gap. Usually on the right side of a reservation.
+        side : str ("left" or "right" or "both"), optional
+            Indicates which side it needs to find a gap. The default is "both".
+
+        Returns
+        -------
+        options : pd.DataFrame
+            filtered DataFrame where only rows with reservations that have at least one gap next to them are left.
+
+        """
         if side not in ["left", "right", "both"]:
             print("get_empty: invalid side {}".format(side))
             return options
@@ -444,6 +571,24 @@ class Planner():
 
 
     def possible_upgrade(self, ID_res1, ID_res2, assignments):
+        """
+        Function that tests if a swap between the reservations is possible and will reduce the amount of upgrades.
+
+        Parameters
+        ----------
+        ID_res1 : INT
+            ID of first reservation.
+        ID_res2 : INT
+            ID of second reservation.
+        assignments : Series
+            self.reservation_assignments.
+
+        Returns
+        -------
+        BOOL
+            variable that indicates if switching the reservations will be benificial.
+
+        """
         combinations = self.combinations
         cottage1 = assignments.loc[ID_res1]
         cottage2 = assignments.loc[ID_res2]
@@ -454,6 +599,22 @@ class Planner():
 
 
     def switch_cottage(self, ID_res, new_cottage_ID):
+        """
+        Function that puts the reservation in the cottage if possible.
+
+        Parameters
+        ----------
+        ID_res : INT
+            ID of the reservation that will be switched.
+        new_cottage_ID : INT
+            ID of the cottage the reservation is going to.
+
+        Returns
+        -------
+        BOOL
+            Variable that indicates if the switch is succesfull.
+
+        """
         combinations = self.combinations
         assignments = self.reservation_assignments()
         reservation_old = self.cottages[assignments.loc[ID_res]].find_reservation(ID_res)
@@ -465,6 +626,22 @@ class Planner():
         return False
     
     def swap_cottages(self, ID_res1, ID_res2):
+        """
+        Function that swaps two reservations if possible
+
+        Parameters
+        ----------
+        ID_res1 : INT
+            ID of fthe first reservation.
+        ID_res2 : INT
+            ID of fthe second reservation..
+
+        Returns
+        -------
+        BOOL
+            Indicates id the swap was succesfull.
+
+        """
         combinations = self.combinations
         assignments = self.reservation_assignments()
         cottage1 = assignments.loc[ID_res1]
@@ -485,6 +662,9 @@ class Planner():
         return False
         
     def results(self):
+        """
+        Function that prints the total score and the individual scores of the current assignment.
+        """        
         msg = "The current assignments have a score of {}\n".format(self.score)
         msg += "The scores are as follows:\n"
         msg += "{} gaps for a score of {}\n".format(self.gaps, self.gaps * 6)

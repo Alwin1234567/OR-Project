@@ -68,6 +68,20 @@ class Cottage():
         return True
     
     def calculate_score(self, return_sort = None):
+        """
+        Function that calculates total score or counts gaps or legionella gaps or upgrades.
+
+        Parameters
+        ----------
+        return_sort : None or STR, optional
+            If None it will return the score, else it will return the requested count. The default is None.
+
+        Returns
+        -------
+        score / count: INT
+            variable with the score or count.
+
+        """
         score = 0
         for reservation in self.reservations:
             if reservation[1]: score += self.scores["Upgrade"]
@@ -126,17 +140,59 @@ class Cottage():
         print(msg)
     
     def find_reservation(self, reservation_ID):
+        """
+        Function that tries to find reservation in self.days based on ID and returns it.
+
+        Parameters
+        ----------
+        reservation_ID : INT
+            ID of the reservation it will look for.
+
+        Returns
+        -------
+        reservation : (reservation_ID : INT, upgrade : BOOL)
+            tuple with reservation ID and wheter or not it is an upgrade in this cottage.
+
+        """
         for day in self.days:
             if day != None:
                 if day[0] == reservation_ID: return day
     
     def empty_day(self, day):
+        """
+        Function that returns if a day is empty.
+
+        Parameters
+        ----------
+        day : INT
+            Integer referring to the day in self.days.
+
+        Returns
+        -------
+        BOOL
+            True if day is empty, False if day is not empty.
+
+        """
         if day == -1 or day > len(self.days) - 1: return False
         if self.days[day] == None: return True
         return False
                 
     
     def remove_no_legionella(self, reservation_ID):
+        """
+        Function that tests if removing the reservation will add legionella
+
+        Parameters
+        ----------
+        reservation_ID : INT
+            ID of the reservation to be removed.
+
+        Returns
+        -------
+        BOOL
+            True if it can be removed without creating legionella, False if it would create legionella.
+
+        """
         reservation = self.find_reservation(reservation_ID)
         count = 0
         for day in self.days:
