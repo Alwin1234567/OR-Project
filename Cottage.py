@@ -203,8 +203,22 @@ class Cottage():
         return True
     
     def is_upgrade(self, reservation_ID): return self.find_reservation(reservation_ID)[1]
-        
     
+    
+    def compressed_days(self):
+        compressed = list()
+        current = None
+        startday = 0
+        for i, day in enumerate(self.days):
+            if day != current:
+                if i != 0:
+                    compressed.append((current, startday, i - 1))
+                current = day
+                startday = i
+        compressed.append((current, startday, i))
+        return compressed
+    
+                
     @property
     def score(self): return self.calculate_score()
     
