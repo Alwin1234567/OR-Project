@@ -22,6 +22,7 @@ class Planner():
         self.print_time("starting Planner init")
          # Add day (0 is earliest reservation day) and departure day
         earliest_day = reservations["Arrival Date"].min()
+        self.start_weekday = earliest_day.weekday()
         reservations["day"] = reservations["Arrival Date"].apply(lambda x: (x-earliest_day).days)
         reservations["final_day"] = reservations["day"].add(reservations["Length of Stay"]).add(-1)
         reservations["final_day"] = reservations['final_day'].clip(upper = reservations["day"].max())
@@ -352,9 +353,8 @@ class Planner():
                 gaps = self.cottages[cottage_ID].gaps
                 if gaps == 0: continue
                 if gaps_3: 
-                    new_itteration = self.find_gap_improvemet_3_caller(gaps, cottage_ID, itteration)
+                    new_itteration = self.find_gap_improvement_3_caller(gaps, cottage_ID, itteration)
                     if new_itteration > itteration:
-                        print("3 is a success")
                         itteration = new_itteration
                         has_improved = True
                 compressed = self.cottages[cottage_ID].compressed_days()
@@ -385,7 +385,6 @@ class Planner():
                                 if self.find_gap_improvement_2(cottage_ID, gap[1], gap[2], filler):
                                     improved = True
                                     has_improved = True
-                                    print("2 is a success")
                                     itteration += 1
                                     if itteration % 20 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
                         last = filler
@@ -469,7 +468,8 @@ class Planner():
             options = options[(options["day_1"] == options["day_2"]).multiply(options["final_day_1"] == options["final_day_2"]).multiply(options["ID_1"] != options["ID_2"])]
             options["improvement"] = options[["ID_1", "ID_2"]].values.tolist()
             options["improvement"] = options["improvement"].map(sorted)
-            options = options.drop_duplicates('improvement', keep = 'first')
+            options["improvementstr"] = options["improvement"].map(str)
+            options = options.drop_duplicates('improvementstr', keep = 'first')
             options = options[options["improvement"].map(lambda reservation_ids: self.possible_upgrade(reservation_ids[0], reservation_ids[1], assignments))]
             if options.empty:
                 self.print_time("ended improving upgrades with a score of {}".format(self.score))
@@ -485,7 +485,61 @@ class Planner():
                 return
 
 
-    def find_gap_improvemet_3_caller(self, gaps, cottage_ID, itteration):
+    def fritothugaps_optimiser(self, max_time = 300):
+        self.print_time("started improving fritothugaps with a score of {}".format(self.score))
+        runtime = time()
+        itteration = 0
+        while True:
+            improved = False
+            for cottage in self.cottages.values():
+                if cottage.gaps == 0: continue
+                compressed = cottage.compressed_days()
+                front_reservation = None
+                gap = None
+                last = None
+                for filler in compressed:
+                    if filler[0] == None:
+                        success = False
+                        last = filler
+                        if (filler[1] + self.start_weekday) % 7 in [4, 5]:
+                            if front_reservation != None:
+                                options = self.filter_fritothuoptions(front_reservation, filler, cottage.ID, "left")
+                                print(1)
+                                if not options.empty:
+                                    print(2)
+                                    success = self.swap_cottages(front_reservation[0][0], options.iloc[0]["ID_res"])
+                                    if success: 
+                                        improved = True
+                                        itteration += 1
+                                        if itteration % 10 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
+                                    else: print("error while swapping cottages")
+                                    
+                        if (not success or filler[2] - filler[1] >= 10) and (filler[2] + self.start_weekday) % 7 in [2, 3]:
+                            gap = filler
+                        else: gap = None
+                    else:
+                        if gap != None and last[0] == None:
+                            options = self.filter_fritothuoptions(filler, gap, cottage.ID, "right")
+                            if not options.empty:
+                                print(options.iloc[0]["ID_res"], filler[0][0], cottage.ID, )
+                                success = self.swap_cottages(filler[0][0], options.iloc[0]["ID_res"])
+                                if success: 
+                                    improved = True
+                                    itteration += 1
+                                    if itteration % 10 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
+                                else: print("error while swapping cottages")
+                                
+                        last = filler
+                
+                    if time() - runtime > max_time:
+                        self.print_time("ended improving fritothugaps with a score of {}".format(self.score))
+                        return
+            if not improved:
+                self.print_time("ended improving fritothugaps with a score of {}".format(self.score))
+                return
+
+
+    def find_gap_improvement_3_caller(self, gaps, cottage_ID, itteration):
         compressed = self.cottages[cottage_ID].compressed_days()
         for swap_set in range(gaps - 1):
             first_gap = None
@@ -532,12 +586,16 @@ class Planner():
         """
         combinations = self.combinations
         assignments = self.reservation_assignments()
-        allowed_reservations = assignments[assignments.isin(combinations[combinations["ID_res"] == front_reservation[0]]["ID_cot"])].index
-        options = combinations[(combinations["ID_cot"] == cottage_ID).multiply(combinations["day"] == front_reservation[1]).multiply(combinations["final_day"] == gap_end).multiply(combinations["ID_res"].isin(allowed_reservations))]
+        allowed_reservations = assignments[assignments.isin(combinations[combinations["ID_res"] == front_reservation[0][0]]["ID_cot"])].index
+        options = combinations[combinations["ID_cot"] == cottage_ID]
+        options = options[options["day"] == front_reservation[1]]
+        options = options[options["final_day"] == gap_end]
+        if options.empty: return False
+        options = options[options["ID_res"].isin(allowed_reservations)]
         if options.empty: return False
         options = self.get_empty(options, front_reservation[1] - 1, gap_end + 1, side = "right")
         if options.empty: return False
-        if not self.swap_cottages(front_reservation[0], options.iloc[0]["ID_res"]): print("error while swapping cottages")
+        if not self.swap_cottages(front_reservation[0][0], options.iloc[0]["ID_res"]): print("error while swapping cottages")
         return True
     
     def find_gap_improvement_2(self, cottage_ID, gap_start, gap_end, back_reservation):
@@ -563,12 +621,16 @@ class Planner():
         """
         combinations = self.combinations
         assignments = self.reservation_assignments()
-        allowed_reservations = assignments[assignments.isin(combinations[combinations["ID_res"] == back_reservation[0]]["ID_cot"])].index
-        options = combinations[(combinations["ID_cot"] == cottage_ID).multiply(combinations["day"] == gap_start).multiply(combinations["final_day"] == back_reservation[2]).multiply(combinations["ID_res"].isin(allowed_reservations))]
+        allowed_reservations = assignments[assignments.isin(combinations[combinations["ID_res"] == back_reservation[0][0]]["ID_cot"])].index
+        # options = combinations[(combinations["ID_cot"] == cottage_ID).multiply(combinations["day"] == gap_start).multiply(combinations["final_day"] == back_reservation[2]).multiply(combinations["ID_res"].isin(allowed_reservations))]
+        options = combinations[combinations["ID_cot"] == cottage_ID]
+        options = options[options["day"] == gap_start]
+        options = options[options["final_day"] == back_reservation[2]]
+        options = options[options["ID_res"].isin(allowed_reservations)]
         if options.empty: return False
         options = self.get_empty(options, gap_start - 1, back_reservation[2] + 1, side = "left")
         if options.empty: return False
-        if not self.swap_cottages(back_reservation[0], options.iloc[0]["ID_res"]): print("error while swapping cottages")
+        if not self.swap_cottages(back_reservation[0][0], options.iloc[0]["ID_res"]): print("error while swapping cottages")
         return True
 
 
@@ -596,7 +658,12 @@ class Planner():
         assignments = self.reservation_assignments()
         combinations = self.combinations
         allowed_reservations = assignments[assignments.isin(combinations[combinations["ID_res"] == middle_reservation]["ID_cot"])].index
-        options = combinations[(combinations["ID_cot"] == cottage_ID).multiply(combinations["day"] == first_gap_start).multiply(combinations["final_day"] == second_gap_end).multiply(combinations["ID_res"].isin(allowed_reservations))]
+        # options = combinations[(combinations["ID_cot"] == cottage_ID).multiply(combinations["day"] == first_gap_start).multiply(combinations["final_day"] == second_gap_end).multiply(combinations["ID_res"].isin(allowed_reservations))]
+        options = combinations[(combinations["ID_cot"] == cottage_ID)]
+        options = options[options["day"] == first_gap_start]
+        options = options[options["final_day"] == second_gap_end]
+        if options.empty: return False
+        options = options[options["ID_res"].isin(allowed_reservations)]
         if options.empty: return False
         options = self.get_empty(options, first_gap_start - 1, second_gap_end + 1, side = "both")
         if options.empty: return False
@@ -636,7 +703,7 @@ class Planner():
         return True
         
 
-    def get_empty(self, options, start, end, side = "both"):
+    def get_empty(self, options, start, end, side = "both", reverse = False):
         """
         Function that filters for reservations with gaps next to them.
 
@@ -664,11 +731,13 @@ class Planner():
         if side == "left" or side == "both":
             options["left_empty"] = start
             options["left_empty"] = options[["ID_res", "left_empty"]].values.tolist()
-            options["left_empty"] = options["left_empty"].map(lambda row: self.cottages[assignments[row[0]]].empty_day(row[1]))
+            if reverse: options["left_empty"] = ~options["left_empty"].map(lambda row: self.cottages[assignments[row[0]]].empty_day(row[1]))
+            else: options["left_empty"] = options["left_empty"].map(lambda row: self.cottages[assignments[row[0]]].empty_day(row[1]))
         if side == "right" or side == "both":
             options["right_empty"] = end
             options["right_empty"] = options[["ID_res", "right_empty"]].values.tolist()
-            options["right_empty"] = options["right_empty"].map(lambda row: self.cottages[assignments[row[0]]].empty_day(row[1]))
+            if reverse: options["right_empty"] = ~options["right_empty"].map(lambda row: self.cottages[assignments[row[0]]].empty_day(row[1]))
+            else: options["right_empty"] = options["right_empty"].map(lambda row: self.cottages[assignments[row[0]]].empty_day(row[1]))
         
         if side == "left":
             options = options[options["left_empty"]]
@@ -705,10 +774,38 @@ class Planner():
         combinations = self.combinations
         cottage1 = assignments.loc[ID_res1]
         cottage2 = assignments.loc[ID_res2]
-        combi1 = combinations.loc[(combinations["ID_res"] == ID_res1).multiply(combinations["ID_cot"] == cottage2)]
-        combi2 = combinations.loc[(combinations["ID_res"] == ID_res2).multiply(combinations["ID_cot"] == cottage1)]
+        # combi1 = combinations.loc[(combinations["ID_res"] == ID_res1).multiply(combinations["ID_cot"] == cottage2)]
+        # combi2 = combinations.loc[(combinations["ID_res"] == ID_res2).multiply(combinations["ID_cot"] == cottage1)]
+        combi1 = combinations[(combinations["ID_res"] == ID_res1).multiply(combinations["ID_cot"] == cottage2)]
+        combi2 = combinations[(combinations["ID_res"] == ID_res2).multiply(combinations["ID_cot"] == cottage1)]
         if combi1.empty or combi2.empty: return False
-        return not bool(combi1.squeeze()["upgrade"] * combi2.squeeze()["upgrade"])
+        # return not bool(combi1.squeeze()["upgrade"] * combi2.squeeze()["upgrade"])
+        return not bool(combi1["upgrade"].sum() * combi2["upgrade"].sum())
+
+
+    def filter_fritothuoptions(self, reservation, gap, cottage_ID, side):
+        assignments = self.reservation_assignments()
+        combinations = self.combinations
+        allowed_reservations = assignments[assignments.isin(combinations[combinations["ID_res"] == reservation[0][0]]["ID_cot"])].index
+        options = combinations[combinations["ID_cot"] == cottage_ID]
+        
+        if side == "right":
+            options = options[options["day"] == reservation[1]]
+            options = options[options["final_day"] < gap[1] - (gap[1] + self.start_weekday) % 7 - 3]
+            options = options[options["final_day"] > gap[2] - 21]
+            options = self.get_empty(options, reservation[1], options["final_day"] + 1, side = "right")
+            if options.empty: return options
+            options = self.get_empty(options, reservation[1], options["final_day"] + 7, side = "right", reverse = True)
+        else:
+            options = options[options["final_day"] == reservation[2]]
+            options = options[options["day"] > gap[2] + (reservation[2] + self.start_weekday) % 7 - 1]
+            options = options[options["day"] < gap[1] + 21]
+            options = self.get_empty(options, options["day"] - 1, reservation[2], side = "left")
+            if options.empty: return options
+            options = self.get_empty(options, options["day"] - 7, reservation[2], side = "left", reverse = True)
+        if options.empty: return options
+        options = options[options["ID_res"].isin(allowed_reservations)]
+        return options       
 
 
     def switch_cottage(self, ID_res, new_cottage_ID):

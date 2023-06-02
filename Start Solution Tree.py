@@ -3,8 +3,8 @@ from Planner import Planner
 
 
  # setting variables
-# database = "Dataset 11.xlsx"
-database = "Dataset Tristan.xlsx"
+database = "Dataset 11.xlsx"
+# database = "Dataset julia.xlsx"
 cottage_sheet = "Cottages"
 reservations_sheet = "Reservations"
 validator_sheet = "Validator"
@@ -24,14 +24,14 @@ assignments = pd.read_excel(database, sheet_name = read_sheet, index_col = 0, us
 
  # code to run planner
 planner = Planner(cottages, reservations)
-# planner.assign_cottages()
+planner.assign_cottages()
 # planner.read_assignements(assignments)
-# planner.gaps_legionella_optimiser_repeat(max_time = 600, gaps_1 = True, gaps_2 = True, gaps_3 = True, gaps_456 = False)
+planner.gaps_legionella_optimiser_repeat(max_time = 600, gaps_1 = True, gaps_2 = True, gaps_3 = True, gaps_456 = True)
 # planner.gaps_optimiser(max_time = 120)
 # planner.legionella_optimiser(max_time = 120)
-# planner.upgrade_optimiser(max_time = 400)
+planner.upgrade_optimiser(max_time = 400)
 # planner.assign_improvements_any(300)
 # planner.assign_improvements_simulated(300)
 # planner.store_excel(database, validator_sheet)
-planner.read_assignements(assignments)
+# planner.read_assignements(assignments)
 planner.results()
