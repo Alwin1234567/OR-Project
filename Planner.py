@@ -5,6 +5,7 @@ from Cottage import Cottage
 import openpyxl
 from math import exp
 from random import random
+from math import log10
 pd.options.mode.chained_assignment = None
 
  # Planner class
@@ -32,9 +33,11 @@ class Planner():
         cottage_Max_pers.append(0)
         cottage_Max_pers.sort()
         for i in range(len(cottage_Max_pers) - 1): reservations.loc[(cottage_Max_pers[i] < reservations["# Persons"]).multiply(reservations["# Persons"] < cottage_Max_pers[i + 1]), "# Persons"] = cottage_Max_pers[i + 1]
-        
+
         self.df_cottages = cottages
         self.df_reservations = reservations
+        self.cottage_digits = int(log10(self.df_cottages["ID"].max())) + 1
+        self.reservation_digits = int(log10(self.df_reservations["ID"].max())) + 1
         self.restrictionlist = restrictionlist
         self.combinations = self.combine()
         daycount = reservations["final_day"].max() + 1
@@ -66,9 +69,20 @@ class Planner():
         combined["fitness"] = combined["Max # Pers"] - combined["# Persons"]
         for restriction in self.restrictionlist:
             combined["fitness"] = combined["fitness"].add(combined["{}_cot".format(restriction)] - combined["{}_res".format(restriction)])
-        combined = combined.reset_index()
+        combined["indexx"] = combined[["ID_res", "ID_cot"]].values.tolist()
+        combined["indexx"] = combined["indexx"].map(lambda IDs: self.IDs_to_index(IDs[0], IDs[1]))
+        combined = combined.set_index("indexx")
         combined["ID"] = combined.index
         return combined
+    
+    
+    def IDs_to_index(self, reservationID, cottageID):
+        reservation_str = str(reservationID)
+        cottage_str     = str(cottageID)
+        reservation_str = "0" * (self.reservation_digits - len(reservation_str)) + reservation_str
+        cottage_str     = "0" * (self.cottage_digits     - len(cottage_str))   + cottage_str
+        return reservation_str + cottage_str
+    
     
     def assign_cottages(self):
         """
@@ -77,7 +91,7 @@ class Planner():
         the cottage based on whether it is considered an upgrade and the fitness score.
         """
         self.print_time("started assigning cottages")
-        order = self.combinations.groupby("ID_res")["index"].count().sort_values().index.tolist()
+        order = self.combinations.groupby("ID_res")["ID"].count().sort_values().index.tolist()
         for reservation_ID in order:
             cottages = self.combinations[self.combinations["ID_res"] == reservation_ID]
             cottages = cottages.sort_values(by = ["upgrade", "fitness"])[["ID_cot", "ID_res", "day", "Length of Stay", "upgrade"]]
@@ -774,13 +788,10 @@ class Planner():
         combinations = self.combinations
         cottage1 = assignments.loc[ID_res1]
         cottage2 = assignments.loc[ID_res2]
-        # combi1 = combinations.loc[(combinations["ID_res"] == ID_res1).multiply(combinations["ID_cot"] == cottage2)]
-        # combi2 = combinations.loc[(combinations["ID_res"] == ID_res2).multiply(combinations["ID_cot"] == cottage1)]
-        combi1 = combinations[(combinations["ID_res"] == ID_res1).multiply(combinations["ID_cot"] == cottage2)]
-        combi2 = combinations[(combinations["ID_res"] == ID_res2).multiply(combinations["ID_cot"] == cottage1)]
-        if combi1.empty or combi2.empty: return False
-        # return not bool(combi1.squeeze()["upgrade"] * combi2.squeeze()["upgrade"])
-        return not bool(combi1["upgrade"].sum() * combi2["upgrade"].sum())
+        index1 = self.IDs_to_index(ID_res1, cottage2)
+        index2 = self.IDs_to_index(ID_res2, cottage1)
+        if index1 not in combinations.index or index2 not in combinations.index: return False
+        return not bool(combinations.loc[index1]["upgrade"] * combinations.loc[index2]["upgrade"])
 
 
     def filter_fritothuoptions(self, reservation, gap, cottage_ID, side):
