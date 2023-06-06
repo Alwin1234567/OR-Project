@@ -4,7 +4,7 @@ from time import time
 from Cottage import Cottage
 import openpyxl
 from math import exp
-from random import random
+from random import random, choice, randint
 from math import log10
 pd.options.mode.chained_assignment = None
 
@@ -172,10 +172,9 @@ class Planner():
         Function that tries to find the best switch for each cottage and applies them. (Very slow)
         """
         self.print_time("started improving assignments with a score of {}".format(self.score))
-        count = 0
+        itteration = 0
         improved = True
         while improved:
-            improved = False
             assignments = self.reservation_assignments()
             cottageIDs = list()
             cottagescores = list()
@@ -183,19 +182,17 @@ class Planner():
                 cottageIDs.append(cottage.ID)
                 cottagescores.append(cottage.score)
             order = pd.Series(cottagescores, index = cottageIDs).sort_values(ascending = False).index.tolist()
-            best = (0, 0)
             for cottage_ID in order:
-                reservations = self.combinations[self.combinations["ID_cot"] == cottage_ID]
-                for index, row in reservations.iterrows():
-                    skip = False
-                    for reservation in self.cottages[cottage_ID].reservations: 
-                        if row["ID_res"] == reservation[0]: 
-                            skip = True
-                            break
-                    if skip: continue
-                    startscore = self.cottages[assignments.loc[row["ID_res"]]].score + \
-                                 self.cottages[cottage_ID].score
-                    if self.cottages[cottage_ID].allowed_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"]):
+                best = (0, 0)
+                options_cot = self.combinations[self.combinations["ID_cot"] == cottage_ID]
+                for gap in self.cottages[cottage_ID].get_gaps():
+                    improved = False
+                    options = options_cot[options_cot["day"] == gap[1]]
+                    options = options[options["final_day"] == gap[2]]
+                                   
+                    for index, row in options.iterrows():
+                        startscore = self.cottages[assignments[row["ID_res"]]].score + \
+                                     self.cottages[cottage_ID].score
                         old_cottage_ID = assignments.loc[row["ID_res"]]
                         if not self.switch_cottage(row["ID_res"], cottage_ID): print("error while switching cottages")
                         endscore = self.cottages[old_cottage_ID].score + self.cottages[cottage_ID].score
@@ -206,9 +203,8 @@ class Planner():
                             improved = True
                 if improved:
                     if not self.switch_cottage(best[0], cottage_ID): print("error while switching cottages")
-                    break
-            count += 1
-            if count % 1 == 0: self.print_time("iteratie {} with score {}".format(count, self.score))
+                    itteration += 1
+                    if itteration % 10 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
         self.print_time("ended improving assignments with a score of {}".format(self.score)) 
     
     def assign_improvements_any(self, max_time = 300):
@@ -263,7 +259,7 @@ class Planner():
         self.print_time("ended improving assignments with a score of {}".format(self.score)) 
     
     
-    def assign_improvements_simulated(self, max_time = 300, temperature_init_mul = 0.0001, temperature_mul = 0.5, temperature_repeat = 10):
+    def assign_improvements_simulated(self, max_time = 300, temperature_init_mul = 0.0001, temperature_mul = 0.5, temperature_repeat = 100):
         """
         Function that uses simulated annealing to try and find a better score (slow).
 
@@ -281,37 +277,51 @@ class Planner():
         self.print_time("started improving assignments with a score of {}".format(self.score))
         temperature = self.score * temperature_init_mul
         runtime = time()
-        assignments = [self.reservation_assignments(), self.score]
-        best_assignment = (assignments[0].copy, self.score)
+        assignments_combo = [self.reservation_assignments(), self.score]
+        best_assignment_combo = (assignments_combo[0].copy(), self.score)
         combinations = self.combinations[self.combinations["Cottage (Fixed)"] == 0]
         itteration = 0
-        while time() - runtime < max_time:
-            success = False
-            row = combinations.sample(replace = False).squeeze()
-            if assignments[0].loc[row["ID_res"]] == row["ID_cot"] or \
-                not self.cottages[row["ID_cot"]].allowed_reservation((row["ID_res"], row["upgrade"]), row["day"], row["Length of Stay"]): pass
-            else:
-                old_cottage_ID = assignments[0].loc[row["ID_res"]]
-                startscore = self.cottages[assignments[0].loc[row["ID_res"]]].score + \
-                             self.cottages[row["ID_cot"]].score
-                if not self.switch_cottage(row["ID_res"], row["ID_cot"]): print("error while switching cottages")
-                endscore = self.cottages[old_cottage_ID].score + self.cottages[row["ID_cot"]].score
-                score = startscore - endscore
-                if score < 0:
-                    success = random() < exp(score / temperature)
+        has_improved = False
+        while True:
+            if time() - runtime > max_time:
+                self.read_assignements(best_assignment_combo[0], remove = True)
+                self.print_time("ended improving assignments with a score of {}".format(self.score))
+                return has_improved
+            gap = None
+            while True:
+                cottage = choice(list(self.cottages.values()))
+                gap_count = cottage.gaps
+                if gap_count > 0:
+                    gap = cottage.get_gap(randint(1, gap_count))
+                    if gap != None: break
+            options = combinations
+            options = options[options["ID_cot"] == cottage.ID]
+            options = options[options["day"] == gap[1]]
+            options = options[options["final_day"] == gap[2]]
+            options = options.sample(min(10, len(options)))
+            if options.empty: continue
+            while not options.empty:
+                success = False
+                sample = options.sample()
+                sample_series = sample.squeeze()
+                old_cottage_ID = assignments_combo[0][sample_series["ID_res"]]
+                startscore = cottage.score + self.cottages[old_cottage_ID].score
+                if not self.switch_cottage(sample_series["ID_res"], cottage.ID): print("error while switching cottages")
+                end_score = cottage.score + self.cottages[old_cottage_ID].score
+                score = startscore - end_score
+                if score < 0: success = random() < exp(score / temperature)
                 else: success = True
-                if success:
-                    assignments[0].loc[row["ID_res"]] = row["ID_cot"]
-                    assignments[1] += score
-                    if assignments[1] > best_assignment[1]: best_assignment = (assignments[0].copy(), self.score)
+                if success: 
+                    assignments_combo[0].loc[sample_series["ID_res"]] = cottage.ID
+                    assignments_combo[1] += score
+                    if assignments_combo[1] > best_assignment_combo[1]: best_assignment_combo = (assignments_combo[0].copy(), self.score)
                     itteration += 1
-                    if itteration % 10 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
+                    if itteration % 100 == 0: self.print_time("iteration {} with score {}".format(itteration, self.score))
                     if itteration % temperature_repeat == 0: temperature *= temperature_mul
-                else:
-                    if not self.switch_cottage(row["ID_res"], old_cottage_ID): print("error while switching back cottages")
-        self.print_time("ended improving assignments with a score of {}".format(self.score))
-        self.read_assignements(best_assignment[0], remove = True)
-    
+                    break
+                if not self.switch_cottage(sample_series["ID_res"], old_cottage_ID): print("error while switching back cottages")
+                options = options.drop(sample.index)
+                
     
     def gaps_legionella_optimiser_repeat(self, max_time = 600, gaps_1 = True, gaps_2 = True, gaps_3 = True, gaps_456 = True):
         """
@@ -325,8 +335,8 @@ class Planner():
         self.print_time("started repeating gaps and legionella with a score of {}".format(self.score))
         runtime = time()
         while True:
-            improved = self.gaps_optimiser(max_time = max_time + runtime - time(), gaps_1 = gaps_1, gaps_2 = gaps_2, gaps_3 = gaps_3, gaps_456 = gaps_456)
-            improved += self.legionella_optimiser(max_time = max_time + runtime - time())
+            self.gaps_optimiser(max_time = max_time + runtime - time(), gaps_1 = gaps_1, gaps_2 = gaps_2, gaps_3 = gaps_3, gaps_456 = gaps_456)
+            improved = self.legionella_optimiser(max_time = max_time + runtime - time())
             if not improved:
                 self.print_time("ended repeating gaps and legionella with a score of {}".format(self.score))
                 return

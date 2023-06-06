@@ -218,6 +218,26 @@ class Cottage():
         compressed.append((current, startday, i))
         return compressed
     
+    
+    def get_gap(self, gap_nr):
+        compressed = self.compressed_days()
+        last_gap = (None, 0)
+        for filler in compressed:
+            if filler[0] == None:
+                last_gap = (filler, last_gap[1] + 1)
+                if last_gap[1] == gap_nr: return last_gap[0]
+        if last_gap[0] == None: print("get_gap called but no gaps available")
+        return last_gap[0]
+    
+    
+    def get_gaps(self):
+        compressed = self.compressed_days()
+        gaplist = list()
+        for filler in compressed:
+            if filler[0] == None: gaplist.append(filler)
+        return gaplist
+        
+    
                 
     @property
     def score(self): return self.calculate_score()
