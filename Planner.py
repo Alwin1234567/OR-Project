@@ -125,12 +125,17 @@ class Planner():
             boolean that describes if the cottages should be emptied first. The default is False.
         """
         self.print_time("started reading assignments")
+        combinations = self.combinations
         if remove:
             for cottage in self.cottages.values():
                 for reservation in cottage.reservations:
                     cottage.remove_reservation(reservation)
         for reservation, cottage in assignments.items():
-            combination = self.combinations.loc[(self.combinations["ID_res"] == reservation).multiply(self.combinations["ID_cot"] == cottage)].squeeze()
+            index = self.IDs_to_index(reservation, cottage)
+            if index not in combinations.index:
+                print("reservation {} with cottage {} is not allowed".format(reservation, cottage))
+                return
+            combination = combinations.loc[index].squeeze()
             self.cottages[cottage].add_reservation((combination["ID_res"], combination["upgrade"]), combination["day"], combination["Length of Stay"])
         self.print_time("ended reading assignments")
     
